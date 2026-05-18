@@ -4,6 +4,19 @@ import { Ionicons } from '@expo/vector-icons';
 import NotificationPoller from '../../src/notification-poller';
 import T from '../../src/theme';
 
+// Hoisted tab icon renderers — React Navigation re-invokes tabBarIcon on
+// every render. Defining these inline (`tabBarIcon: ({color, size}) =>
+// <Ionicons .../>`) creates a new component identity each render → React
+// destroys/recreates the icon subtree (the `react/no-unstable-nested-
+// components` warning that surfaced in iter6). Pulling them up here gives
+// each tab a stable component identity.
+type IconArgs = { color: string; size: number };
+const HomeIcon     = ({ color, size }: IconArgs) => <Ionicons name="home"          size={size} color={color} />;
+const MarketIcon   = ({ color, size }: IconArgs) => <Ionicons name="storefront"    size={size} color={color} />;
+const WorkIcon     = ({ color, size }: IconArgs) => <Ionicons name="code-working"  size={size} color={color} />;
+const EarningsIcon = ({ color, size }: IconArgs) => <Ionicons name="wallet"        size={size} color={color} />;
+const ProfileIcon  = ({ color, size }: IconArgs) => <Ionicons name="person-circle" size={size} color={color} />;
+
 export default function DeveloperLayout() {
   return (
     <View style={{ flex: 1 }}>
@@ -18,11 +31,11 @@ export default function DeveloperLayout() {
           tabBarLabelStyle: { fontSize: 11 },
         }}
       >
-        <Tabs.Screen name="home"     options={{ title: 'Home',     tabBarIcon: ({ color, size }) => <Ionicons name="home"          size={size} color={color} /> }} />
-        <Tabs.Screen name="market"   options={{ title: 'Market',   tabBarIcon: ({ color, size }) => <Ionicons name="storefront"    size={size} color={color} /> }} />
-        <Tabs.Screen name="work"     options={{ title: 'Work',     tabBarIcon: ({ color, size }) => <Ionicons name="code-working"  size={size} color={color} /> }} />
-        <Tabs.Screen name="earnings" options={{ title: 'Earnings', tabBarIcon: ({ color, size }) => <Ionicons name="wallet"        size={size} color={color} /> }} />
-        <Tabs.Screen name="profile"  options={{ title: 'Profile',  tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} /> }} />
+        <Tabs.Screen name="home"     options={{ title: 'Home',     tabBarIcon: HomeIcon }} />
+        <Tabs.Screen name="market"   options={{ title: 'Market',   tabBarIcon: MarketIcon }} />
+        <Tabs.Screen name="work"     options={{ title: 'Work',     tabBarIcon: WorkIcon }} />
+        <Tabs.Screen name="earnings" options={{ title: 'Earnings', tabBarIcon: EarningsIcon }} />
+        <Tabs.Screen name="profile"  options={{ title: 'Profile',  tabBarIcon: ProfileIcon }} />
 
         {/* Hidden routable screens — accessible only by deep-link from
             other screens, never shown as bottom tabs. */}

@@ -10063,6 +10063,94 @@ async def startup_event():
             {"$set": {"assignment_mode": "manual"}},
         )
 
+    # ============ STAGE 4 — TESTER VALIDATION SEED (idempotent) ============
+    # Seed demo validations + issues so the Expo tester surface shows real
+    # data on first login. Stage 4 backend exists (/api/tester/* + /api/
+    # validation/*) but historically had no flow producing validations.
+    # This bootstrap fills that gap until the assignment_engine wires up
+    # real production validations.
+    # NOTE: canonical collection is `validation_tasks` (not `validations`).
+    _vcount = await db.validation_tasks.count_documents({})
+    if _vcount == 0:
+        _tester = await db.users.find_one(
+            {"email": "tester@atlas.dev"}, {"_id": 0, "user_id": 1}
+        )
+        _mods_for_seed = await db.modules.find(
+            {"status": {"$in": ["done", "delivered", "in_review"]}},
+            {"_id": 0, "module_id": 1, "project_id": 1, "name": 1, "title": 1},
+        ).limit(5).to_list(5)
+        if _tester and _mods_for_seed:
+            _tid = _tester["user_id"]
+            _now = datetime.now(timezone.utc)
+            _seeds = []
+            # 2 mine — actively on plate
+            for i, m in enumerate(_mods_for_seed[:2]):
+                _seeds.append({
+                    "validation_id": f"val_{uuid.uuid4().hex[:12]}",
+                    "work_unit_id": m["module_id"],  # legacy: modules ARE work_units in seed
+                    "project_id": m["project_id"],
+                    "assigned_to": _tid,
+                    "tester_id": _tid,
+                    "status": "pending" if i == 0 else "in_progress",
+                    "issues": [],
+                    "tester_notes": None,
+                    "created_at": (_now - timedelta(hours=2 + i)).isoformat(),
+                    "completed_at": None,
+                    "module_title": m.get("name") or m.get("title") or "Module",
+                })
+            # 2 mine — completed today (passed + failed) for the today-snapshot
+            for i, m in enumerate(_mods_for_seed[2:4]):
+                _status = "passed" if i == 0 else "failed"
+                _seeds.append({
+                    "validation_id": f"val_{uuid.uuid4().hex[:12]}",
+                    "work_unit_id": m["module_id"],
+                    "project_id": m["project_id"],
+                    "assigned_to": _tid,
+                    "tester_id": _tid,
+                    "status": _status,
+                    "issues": [],
+                    "tester_notes": "All flows verified" if _status == "passed" else "Edge case fails — see issue",
+                    "created_at": (_now - timedelta(hours=8 + i)).isoformat(),
+                    "completed_at": (_now - timedelta(hours=4 + i)).isoformat(),
+                    "module_title": m.get("name") or m.get("title") or "Module",
+                })
+            # 1 unclaimed — sits in queue
+            if len(_mods_for_seed) >= 5:
+                m = _mods_for_seed[4]
+                _seeds.append({
+                    "validation_id": f"val_{uuid.uuid4().hex[:12]}",
+                    "work_unit_id": m["module_id"],
+                    "project_id": m["project_id"],
+                    "assigned_to": None,
+                    "tester_id": None,
+                    "status": "pending",
+                    "issues": [],
+                    "tester_notes": None,
+                    "created_at": (_now - timedelta(minutes=30)).isoformat(),
+                    "completed_at": None,
+                    "module_title": m.get("name") or m.get("title") or "Module",
+                })
+            if _seeds:
+                await db.validations.insert_many(_seeds)
+                # Issue example tied to the failed validation (3rd seed if it exists)
+                _failed = next((v for v in _seeds if v["status"] == "failed"), None)
+                if _failed:
+                    await db.validation_issues.insert_one({
+                        "issue_id": f"iss_{uuid.uuid4().hex[:12]}",
+                        "validation_id": _failed["validation_id"],
+                        "project_id": _failed["project_id"],
+                        "work_unit_id": _failed["work_unit_id"],
+                        "created_by": _tid,
+                        "title": "Validation form submits twice on slow connection",
+                        "description": "Tap → spinner → tap again → 2 POSTs reach backend, second 409s. Add idempotency.",
+                        "severity": "high",
+                        "status": "open",
+                        "created_at": _failed["completed_at"],
+                    })
+                logger.info(
+                    f"TESTER SEED: {len(_seeds)} validations + 1 issue → tester@atlas.dev"
+                )
+
 
     # Seed scope templates if empty
     templates_count = await db.scope_templates.count_documents({})

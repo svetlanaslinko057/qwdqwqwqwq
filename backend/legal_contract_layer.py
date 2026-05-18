@@ -52,6 +52,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("legal_contract")
@@ -657,9 +658,8 @@ def init_router(
             "is_signed": c["state"] == "signed",
         }
 
-    @router.get("/contracts/{contract_id}/html", response_class=None)
+    @router.get("/contracts/{contract_id}/html", response_class=HTMLResponse)
     async def get_contract_html(contract_id: str, user=Depends(_get_current_user)):
-        from fastapi.responses import HTMLResponse
         c = await _db.contracts.find_one(
             {"contract_id": contract_id, "user_id": user.user_id}, {"_id": 0}
         )
