@@ -10131,7 +10131,7 @@ async def startup_event():
                     "module_title": m.get("name") or m.get("title") or "Module",
                 })
             if _seeds:
-                await db.validations.insert_many(_seeds)
+                await db.validation_tasks.insert_many(_seeds)
                 # Issue example tied to the failed validation (3rd seed if it exists)
                 _failed = next((v for v in _seeds if v["status"] == "failed"), None)
                 if _failed:
@@ -22590,12 +22590,6 @@ async def admin_reprice_preview(
     body: RepriceRequest,
     admin: User = Depends(require_role("admin")),
 ):
-    """Preview a new pricing snapshot for a project with admin-chosen axes.
-
-    Does NOT mutate the project — purely a what-if calculation. Use this to
-    populate the admin "Re-price offer" dropdowns and show the delta.
-    The committed save goes through POST /admin/projects/{id}/reprice.
-    """
     from pricing_engine import (
         get_pricing_config,
         estimate_base_price,
