@@ -2,6 +2,48 @@
 
 > Russian-speaking user. Этот PRD ведётся на русском по запросу.
 
+## 0a. Сессия May 18 2026 (vNEXT-4) — Deposit Flow + Conversion Chain Re-validation
+
+> Пользователь дал чёткий запрос: *«Прогнать testing_agent чтобы независимо подтвердить всю цепочку visitor estimate → register → auto-claim → admin sees converted → admin can PATCH. Когда добавите Stripe key → активировать Pay deposit. Опционально: показывать Estimate price в client/dashboard sidebar».*
+
+### Что появилось
+
+**1. Полная валидация цепочки конверсии (iter 8 → iter 9 testing_agent).**
+- Backend 8/8 pass: `/api/estimate` → `/api/auth/register` → `/api/leads/{id}/claim` → `/api/admin/leads?status=converted` → `PATCH /api/admin/leads/{id}` → `GET /api/client/project/{id}/workspace` → `POST /api/client/projects/{id}/deposit/checkout` → `GET /api/client/attention`.
+- Тест зафиксирован: `/app/backend/tests/test_conversion_deposit_flow.py` + `/app/test_reports/pytest/conversion_deposit_iter8.xml` и `iteration_8.json`/`iteration_9.json`.
+
+**2. Workspace endpoint расширен `deposit`-блоком.** `client_workspace.py` теперь возвращает:
+```json
+"deposit": {
+  "required": true,
+  "paid": false,
+  "amount": 169.5,
+  "final_price": 1695.0,
+  "project_status": "awaiting_deposit"
+}
+```
+Аддитивно — старые проекты без `deposit_amount` получают `required:false`.
+
+**3. Новый endpoint `POST /api/client/projects/{id}/deposit/checkout`** (server.py).
+- Создаёт идемпотентный invoice (`deposit:true`) и вызывает `_provider_create_payment` (тот же boundary, что для module-invoices).
+- Stripe LIVE когда `STRIPE_SECRET_KEY` установлен в admin/integrations; иначе mock-payment (рабочий stub URL для E2E).
+- Защита: 404 если не владелец, 409 если статус не `awaiting_deposit`, `already_paid:true` если повторный вызов после оплаты.
+
+**4. `/api/client/attention` теперь репортит `awaiting_deposit` + `awaiting_deposit_projects`.** До 5 свежих проектов с `name`, `deposit_amount`, `final_price` — для рендера сайдбара.
+
+**5. Mobile UI:**
+- `/client/projects/[id].tsx`: добавлена `deposit-card` (testID) в начало ScrollView — показывается когда `ws.deposit?.required && !ws.deposit?.paid`. Кнопка `pay-deposit-btn` зовёт `/deposit/checkout` и открывает `payment_url` через `Linking.openURL`.
+- `/client/home.tsx`: блок `awaiting-deposit-sidebar` (testID) с rows `awaiting-deposit-{project_id}` — render когда `attention.awaiting_deposit_projects.length > 0`. Banner CTA "Review now" теперь направляет в первый awaiting-deposit проект, а не первый active.
+
+### Stripe activation
+Когда админ положит реальный Stripe key через `/admin/integrations`, payment provider автоматически переключится на `stripe-payments` → `pay-deposit-btn` начнёт открывать hosted Stripe checkout вместо mock stub. Frontend изменений не требуется — boundary прозрачен.
+
+### Известные тонкости (iter 9)
+- `auth-dev-code-banner` отключен в preview (`AUTH_OTP_DEV_MODE=false`). Для автоматизированного QA OTP-код доступен через коллекцию `auth_codes` в Mongo. Опционально: включить DEV_MODE для preview окружений.
+- `project.status` на верхнем уровне `workspace` ответа отсутствует — статус доступен только через `deposit.project_status`. Не блокер.
+
+---
+
 ## 0b. Сессия May 18 2026 (vNEXT-3) — Pricing Review Session (10 archetypes)
 
 > Пост-stabilization сигн-офф пользователя: *«погонять 20 synthetic briefs… axis discipline… semantic inflation… where humans disagree with the engine».*

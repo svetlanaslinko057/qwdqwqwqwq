@@ -243,6 +243,7 @@ def init_router(db, get_current_user_dep):
             "project": {
                 "project_id": project_id,
                 "project_title": project.get("name") or project.get("title") or "",
+                "status": proj_status or None,
                 "created_at": project.get("created_at"),
             },
             "deposit": deposit_block,
